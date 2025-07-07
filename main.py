@@ -6,7 +6,8 @@ import io
 import os
 from docx import Document
 from tempfile import NamedTemporaryFile
-from google import genai
+from dotenv import load_dotenv
+import google.generativeai as genai
 import requests
 import json
 import re
@@ -16,6 +17,8 @@ from hubspot.crm.contacts import (
     PublicObjectSearchRequest, Filter, FilterGroup,
     SimplePublicObjectInputForCreate, SimplePublicObjectInput
 )
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -31,9 +34,10 @@ app.add_middleware(
 HUBSPOT_TOKEN = os.getenv("HUBSPOT_TOKEN")
 
 # Initialize Gemini client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-hubspot_client = HubSpot(access_token=os.getenv("HUBSPOT_TOKEN"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL = "gemini-2.5-flash"
+model = genai.GenerativeModel(model_name=MODEL)
+hubspot_client = HubSpot(access_token=os.getenv("HUBSPOT_TOKEN"))
 FOLDER_ID="249026326717"
 
 # Improved prompt: prevents Gemini from wrapping response in code blocks
@@ -137,26 +141,11 @@ async def parse_resume(file: UploadFile = File(...)):
 
     try:
         # Send to Gemini
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=prompt,
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"},
-                        "email": {"type": "string"},
-                        "phone": {"type": "string"},
-                        "job_title": {"type": "string"},
-                        "skills": {"type": "array", "items": {"type": "string"}},
-                        "experience": {"type": "string"},
-                        "company": {"type": "string"},
-                        "location": {"type": "string"}
-                    },
-                    "required": ["name", "email", "phone", "job_title", "skills", "experience", "company", "location"]
-                },
+        response = model.generate_content(
+            prompt,
+            generation_config={
                 "temperature": 0.1,
+                "response_mime_type": "application/json"
             }
         )
 
